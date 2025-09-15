@@ -17,9 +17,12 @@ module AsciiChart
       colors = options[:color]
       raise ArgumentError, "Series colors array must have the same dimension as the series array" if colors.is_a?(Array) && colors.count != series.count
 
+      min, max = series.flatten.compact.minmax
+
       chars = series.map.with_index do |s, i|
         opts = options.clone
         opts[:color] = colors[i] if colors && colors.is_a?(Array)
+        opts.merge!(min:, max:)
         Line.new(s, **opts).chars
       end
 

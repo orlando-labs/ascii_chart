@@ -43,15 +43,31 @@ module AsciiChart
           raise ArgumentError, "Axis offset must be a positive integer less or equal to series size"
         end
       end
+
+      if options[:min] && options[:max] && options[:min] == options[:max]
+        raise ArgumentError, "Chart min and max boundaries must not be the same"
+      end
+
+      min, max = @series.compact.minmax
+      @min = options[:min] || min
+      @max = options[:max] || max
+      raise ArgumentError, "Invalid Y axis range #{@min}..#{@max}" if @min > @max
+      if @min == @max
+        @min -= 1 unless options[:min]
+        @max += 1 unless options[:max]
+      end
     end
 
     def chars
-      max = @series.max
-      min = @series.min
-      interval = (max - min).abs
+      if @min == @max
+        @min -= 1
+        @max += 1
+      end
+      
+      interval = @max - @min
 
       rows_count = @options[:height] || (interval.between?(5, 20) ? interval.ceil : DEFAULTS[:height])
-      step = interval / (@options[:height].to_f - 1)
+      step = interval / (@options[:height].to_f - 1) + Float::EPSILON
       offset = @options[:offset] + AXIS_OFFSET
 
       width = @series.length + AXIS_OFFSET # one for label and one for axis
@@ -59,24 +75,26 @@ module AsciiChart
       result = Array.new(rows_count) { [BLANK_SPACE] * width }
 
       rows_count.times.each do |y|
-        label = @options[:format] % (max - y * step)
+        label = @options[:format] % (@max - y * step)
         label_x = [offset - label.length, 0].max
         result[y][label_x] = label
         result[y][label_x + 1] = AXIS_MARK
       end
 
       (0...@series.length - 1).each do |x|
-        _curr = ((max - @series[x + 0]) / step).round
-        _next = ((max - @series[x + 1]) / step).round
+        _curr = @series[x + 0] ? ((@max - @series[x + 0]) / step).round : nil
+        _next = @series[x + 1] ? ((@max - @series[x + 1]) / step).round : nil
 
-        if _curr == _next
+        if _curr == _next || !_next
           result[_curr][x + offset] = colored(HORIZONTAL)
         else
           result[_curr][x + offset] = colored(_curr < _next ? DECREASING_HI : INCREASING_HI)
-          result[_next][x + offset] = colored(_curr < _next ? DECREASING_LO : INCREASING_LO)
+          if _next
+            result[_next][x + offset] = colored(_curr < _next ? DECREASING_LO : INCREASING_LO)
 
-          ([_curr, _next].min + 1...[_curr, _next].max).each do |y|
-            result[y][x + offset] = colored(VERTICAL)
+            ([_curr, _next].min + 1...[_curr, _next].max).each do |y|
+              result[y][x + offset] = colored(VERTICAL)
+            end
           end
         end
       end
